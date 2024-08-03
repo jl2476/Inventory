@@ -50,17 +50,17 @@ export default function Home() {
   const updateInventory = async () => {
     try {
       // creates a query to firebase for entire inventory collection
-      const query = query(collection(firestore, 'inventory'))
+      const search = query(collection(firestore, 'inventory'))
 
       // waits on up to date inventory information matching the query i.e. the snapshot
-      const snapshot = await getDocs(query)
+      const snapshot = await getDocs(search)
 
       const inventory = []
       // corresponding with the query, iterates over each item in inventory
       snapshot.forEach((item) => {
         // Creates new objects representing the items in inventory 
         // uses spread operator to copy all relevant data
-        inventory.push({ ...item.data, name: item.id })
+        inventory.push({ name: item.id, ...item.data })
       })
       // sets the inventory to the updated collection of inventory objects
       setInventory(inventory)
@@ -87,29 +87,35 @@ export default function Home() {
    */
   const addItem = async (item) => {
     try {
-      // references a specified item in inventory; document reference
-      const item = doc(collection(firestore, 'inventory'), item)
+      // reference a specified item in inventory; document reference
+      const itemDocRef = doc(collection(firestore, 'inventory'), item);
 
-      // retrieves and waits for the snapshot of item information matching the REFERENCE
-      const snapshot = await getDoc(item)
+      // retrieve and wait for the snapshot of item information matching the REFERENCE
+      const snapshot = await getDoc(itemDocRef);
 
-      // retrieves the quantity from the items data fields
+      if (!snapshot.exists()) {
+        // handle the case where the document does not exist
+        console.error('Item not found in inventory.');
+        await setDoc(itemDocRef, { quantity: 1 });
+        // Update inventory with information
+        await updateInventory();
+        return;
+      }
+
+      // Retrieve the data from the snapshot
       const data = snapshot.data();
-      const { quantity } = data; // or const quantity = data.quantity
 
-      // update the quantity of the item by 1
-      // we have to use the spread operator to retain/set key properties/information
-      // NOTE: later properties will overwrite earlier ones if they have the same key
-      // if object doesn't exist quantity will default to 1 (After incrementing)
-      // we could also reference with data.quantity
-      await setDoc(item, { ...data, quantity: (quantity || 0) + 1 });
+      // Check if data is defined and has the quantity property
+      const quantity = data?.quantity ?? 0; // Use nullish coalescing to default to 0 if undefined
 
-      // update inventory with information
-      await updateInventory()
+      // Update the quantity of the item by 1
+      await setDoc(itemDocRef, { ...data, quantity: quantity + 1 });
+
+      // Update inventory with information
+      await updateInventory();
     } catch (error) {
-      console.error('Failed to add item: ', error)
+      console.error('Failed to add item: ', error);
     }
-
   };
 
   /**
@@ -121,30 +127,32 @@ export default function Home() {
   const removeItem = async (item) => {
     try {
       // references a specified item in inventory; document reference
-      const item = doc(collection(firestore, 'inventory'), item)
+      const itemDocRef = doc(collection(firestore, 'inventory'), item);
 
       // retrieves and waits for the snapshot of item information matching the REFERENCE
-      const snapshot = await getDoc(item)
+      const snapshot = await getDoc(itemDocRef);
 
       // checks if item information/item exists
       if (snapshot.exists()) {
-        // deconstructs for item quantity
-        const { quantity } = docSnap.data()
+        // Destructures for item quantity
+        const { quantity } = snapshot.data();
+
         if (quantity === 1) {
           // delete item if quantity becomes 0
-          await deleteDoc(docRef)
+          await deleteDoc(itemDocRef);
         } else {
-          // otherwise decrease quantity by 1
-          await setDoc(item, { ...data, quantity: quantity - 1 })
+          // otherwise decrease quantity by 1; merge previous fields with updated quantity
+          await setDoc(itemDocRef, { quantity: quantity - 1 }, { merge: true }); // Updated setDoc usage
         }
       }
 
       // update inventory with information
-      await updateInventory()
+      await updateInventory();
     } catch (error) {
-      console.error('Failed to remove item: ', error)
+      console.error('Failed to remove item: ', error);
     }
   };
+
 
 
   /**
