@@ -13,9 +13,10 @@ import {
   getDoc,
 } from 'firebase/firestore'
 
+import searchByUPC from './UPC';
 
 
-// used for styling 
+// Used for styling 
 const style = {
   position: 'absolute',
   top: '50%',
@@ -29,139 +30,140 @@ const style = {
   display: 'flex',
   flexDirection: 'column',
   gap: 3,
-};
+}
 
 
 
-/**
- * Dynamically renders the home page
- * @returns A JSX structure that represents the rendered UI of the home page
- */
 export default function Home() {
   const [inventory, setInventory] = useState([])
   const [open, setOpen] = useState(false)
   const [itemName, setItemName] = useState('')
+  const [upc, setUpc] = useState('')
+  const [selectedMethod, setSelectedMethod] = useState(null) // null, 'name', or 'upc'
+  const [choiceModalOpen, setChoiceModalOpen] = useState(false)
 
-
-  /**
-   * Queries the ‘inventory’ collection in Firestore and updates our local state;
-   * We use async to allow the use of await for queries
-   */
   const updateInventory = async () => {
     try {
-      // creates a query to firebase for entire inventory collection
       const search = query(collection(firestore, 'inventory'))
-
-      // waits on up to date inventory information matching the query i.e. the snapshot
       const snapshot = await getDocs(search)
 
       const inventory = []
-      // corresponding with the query, iterates over each item in inventory
       snapshot.forEach((item) => {
-        // Creates new objects representing the items in inventory 
-        // uses spread operator to copy all relevant data
-        inventory.push({ name: item.id, ...item.data })
+        inventory.push({ id: item.id, ...item.data() })
       })
-      // sets the inventory to the updated collection of inventory objects
       setInventory(inventory)
     } catch (error) {
-      // error handling
       console.error('Error updating inventory: ', error)
     }
   };
 
-  /**
-   * Hook that ensures that the inventory is updated and ensures the below functionality
-   * is properly executed when the component is mounted.
-   */
   useEffect(() => {
     updateInventory()
   }, []);
 
-
-  /**
-   * Increases the quantity of an item in inventory by 1 and updates inventory
-   * NOTE: this funct and updateInventory rely on different i.e. the latter uses queries for a list
-   * of items while the former uses a document reference to the item to retrieve item information
-   * @param {*} item the item being added to inventory
-   */
-  const addItem = async (item) => {
+  const addItem = async () => {
     try {
-      // reference a specified item in inventory; document reference
-      const itemDocRef = doc(collection(firestore, 'inventory'), item);
-
-      // retrieve and wait for the snapshot of item information matching the REFERENCE
-      const snapshot = await getDoc(itemDocRef);
-
-      if (!snapshot.exists()) {
-        // handle the case where the document does not exist
-        console.error('Item not found in inventory.');
-        await setDoc(itemDocRef, { quantity: 1 });
-        // Update inventory with information
-        await updateInventory();
+      if (!selectedMethod) {
+        console.error('No method selected');
         return;
       }
 
-      // Retrieve the data from the snapshot
-      const data = snapshot.data();
+      if (selectedMethod === 'upc') {
+        // Handle UPC: fetch product details
+        const productDetails = await searchByUPC(upc);
 
-      // Check if data is defined and has the quantity property
-      const quantity = data?.quantity ?? 0; // Use nullish coalescing to default to 0 if undefined
+        // Check if productDetails is not null or undefined
+        if (!productDetails) {
+          console.error('No product details found for this UPC');
+          return;
+        }
 
-      // Update the quantity of the item by 1
-      await setDoc(itemDocRef, { ...data, quantity: quantity + 1 });
+        // Destructure and check if name and fetchedUPC are defined
+        const { name, upc: fetchedUPC } = productDetails;
 
-      // Update inventory with information
+
+        // Use the fetched name and UPC for Firestore
+        const itemDocRef = doc(collection(firestore, 'inventory'), fetchedUPC);
+
+        const snapshot = await getDoc(itemDocRef);
+
+        if (!snapshot.exists()) {
+          // Create a new item with details from UPC
+          await setDoc(itemDocRef, { name, quantity: 1, upc: fetchedUPC });
+        } else {
+          // Update quantity if item exists
+          const data = snapshot.data();
+          const quantity = data?.quantity ?? 0;
+          await setDoc(itemDocRef, { ...data, quantity: quantity + 1 }, { merge: true });
+        }
+      } else if (selectedMethod === 'name') {
+        // Handle name
+        if (!itemName) {
+          console.error('Item name is undefined or empty');
+          return;
+        }
+
+        const itemDocRef = doc(collection(firestore, 'inventory'), itemName);
+        const snapshot = await getDoc(itemDocRef);
+
+        if (!snapshot.exists()) {
+          // Create a new item with name
+          await setDoc(itemDocRef, { quantity: 1, name: itemName, upc: '' });
+        } else {
+          // Update quantity if item exists
+          const data = snapshot.data();
+          const quantity = data?.quantity ?? 0;
+          await setDoc(itemDocRef, { ...data, quantity: quantity + 1 }, { merge: true });
+        }
+      }
+
+      // Update inventory list
       await updateInventory();
     } catch (error) {
       console.error('Failed to add item: ', error);
     }
   };
 
-  /**
-   * Decreases the quantity of an item in inventory by 1 and updates inventory
-   * NOTE: this funct and updateInventory rely on different i.e. the latter uses queries for a list
-   * of items while the former uses a document reference to the item to retrieve item information
-   * @param {*} item the item being added to inventory
-   */
-  const removeItem = async (item) => {
-    try {
-      // references a specified item in inventory; document reference
-      const itemDocRef = doc(collection(firestore, 'inventory'), item);
 
-      // retrieves and waits for the snapshot of item information matching the REFERENCE
+  const removeItem = async (id) => {
+    try {
+      const itemDocRef = doc(collection(firestore, 'inventory'), id);
+
       const snapshot = await getDoc(itemDocRef);
 
-      // checks if item information/item exists
       if (snapshot.exists()) {
-        // Destructures for item quantity
         const { quantity } = snapshot.data();
 
         if (quantity === 1) {
-          // delete item if quantity becomes 0
           await deleteDoc(itemDocRef);
         } else {
-          // otherwise decrease quantity by 1; merge previous fields with updated quantity
-          await setDoc(itemDocRef, { quantity: quantity - 1 }, { merge: true }); // Updated setDoc usage
+          await setDoc(itemDocRef, { quantity: quantity - 1 }, { merge: true });
         }
       }
 
-      // update inventory with information
       await updateInventory();
     } catch (error) {
       console.error('Failed to remove item: ', error);
     }
   };
 
+  const handleChoiceOpen = () => setChoiceModalOpen(true);
+  const handleChoiceClose = () => setChoiceModalOpen(false);
 
+  const handleOpen = () => {
+    handleChoiceOpen();
+    setItemName('');
+    setUpc('');
+    setSelectedMethod(null);
+  };
 
-  /**
-   * Modal control functions; Manages the modal state
-   * Used in conjection w useState hook in React.
-   */
-  const handleOpen = () => setOpen(true);
+  const handleAddItem = () => {
+    addItem();
+    handleClose();
+    handleChoiceClose();
+  };
+
   const handleClose = () => setOpen(false);
-
 
   return (
     <Box
@@ -174,6 +176,40 @@ export default function Home() {
       gap={2}
     >
       <Modal
+        open={choiceModalOpen}
+        onClose={handleChoiceClose}
+        aria-labelledby="choice-modal-title"
+        aria-describedby="choice-modal-description"
+      >
+        <Box sx={style}>
+          <Typography id="choice-modal-title" variant="h6" component="h2">
+            Choose Input Method
+          </Typography>
+          <Stack spacing={2}>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setSelectedMethod('name');
+                handleChoiceClose();
+                setOpen(true);
+              }}
+            >
+              Item Name
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                setSelectedMethod('upc');
+                handleChoiceClose();
+                setOpen(true);
+              }}
+            >
+              UPC
+            </Button>
+          </Stack>
+        </Box>
+      </Modal>
+      <Modal
         open={open}
         onClose={handleClose}
         aria-labelledby="modal-modal-title"
@@ -184,21 +220,31 @@ export default function Home() {
             Add Item
           </Typography>
           <Stack width="100%" direction={'row'} spacing={2}>
-            <TextField
-              id="outlined-basic"
-              label="Item"
-              variant="outlined"
-              fullWidth
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-            />
+            {selectedMethod === 'name' && (
+              <TextField
+                id="item-name"
+                label="Item Name"
+                variant="outlined"
+                fullWidth
+                value={itemName}
+                onChange={(e) => setItemName(e.target.value)}
+                placeholder="Enter item name"
+              />
+            )}
+            {selectedMethod === 'upc' && (
+              <TextField
+                id="item-upc"
+                label="UPC"
+                variant="outlined"
+                fullWidth
+                value={upc}
+                onChange={(e) => setUpc(e.target.value)}
+                placeholder="Enter UPC"
+              />
+            )}
             <Button
               variant="outlined"
-              onClick={() => {
-                addItem(itemName)
-                setItemName('')
-                handleClose()
-              }}
+              onClick={handleAddItem}
             >
               Add
             </Button>
@@ -222,9 +268,9 @@ export default function Home() {
           </Typography>
         </Box>
         <Stack width="800px" height="300px" spacing={2} overflow={'auto'}>
-          {inventory.map(({ name, quantity }) => (
+          {inventory.map(({ id, name, quantity }) => (
             <Box
-              key={name}
+              key={id}
               width="100%"
               minHeight="150px"
               display={'flex'}
@@ -234,12 +280,12 @@ export default function Home() {
               paddingX={5}
             >
               <Typography variant={'h3'} color={'#333'} textAlign={'center'}>
-                {name.charAt(0).toUpperCase() + name.slice(1)}
+                {name ? name.charAt(0).toUpperCase() + name.slice(1) : id}
               </Typography>
               <Typography variant={'h3'} color={'#333'} textAlign={'center'}>
                 Quantity: {quantity}
               </Typography>
-              <Button variant="contained" onClick={() => removeItem(name)}>
+              <Button variant="contained" onClick={() => removeItem(id)}>
                 Remove
               </Button>
             </Box>
@@ -248,7 +294,4 @@ export default function Home() {
       </Box>
     </Box>
   )
-};
-
-
-
+}
