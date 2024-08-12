@@ -1,4 +1,3 @@
-version: '3'
 services:
   next_app:
     build:
@@ -8,17 +7,8 @@ services:
       - '3000:3000' # Expose Next.js port
     networks:
       - app-network
-
-  nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile.nginx # Path to your Nginx Dockerfile
-    ports:
-      - '8080:80' # Expose Nginx port
-    depends_on:
-      - next_app
-    networks:
-      - app-network
+    env_file:
+      - .env # Load environment variables from .env file
 
 networks:
   app-network:
