@@ -2,7 +2,7 @@ import axios from 'axios';
 
 
 const searchByUPC = async (upc) => {
-    const apiUrl = `http://localhost:8080/api?upc=${upc}`; // Update to point to NGINX
+    const apiUrl = `/api/data?upc=${upc}`; // Update to point to NGINX
     try {
         const response = await axios.get(apiUrl, {
             headers: {
