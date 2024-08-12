@@ -1,0 +1,25 @@
+version: '3'
+services:
+  next_app:
+    build:
+      context: .
+      dockerfile: Dockerfile # Path to your Next.js Dockerfile
+    ports:
+      - '3000:3000' # Expose Next.js port
+    networks:
+      - app-network
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx # Path to your Nginx Dockerfile
+    ports:
+      - '8080:80' # Expose Nginx port
+    depends_on:
+      - next_app
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

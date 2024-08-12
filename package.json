@@ -11,6 +11,7 @@
   "dependencies": {
     "@emotion/react": "^11.13.0",
     "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^5.16.7",
     "@mui/material": "^5.16.6",
     "axios": "^1.7.3",
     "firebase": "^10.12.5",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "eslint": "^8",
+    "eslint-config-google": "^0.14.0",
     "eslint-config-next": "14.2.5"
   }
 }

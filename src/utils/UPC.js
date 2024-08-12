@@ -1,23 +1,16 @@
 import axios from 'axios';
 
 
-
-export const searchByUPC = async (upc) => {
-    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-    const apiUrl = 'https://api.upcitemdb.com/prod/trial/lookup';
+const searchByUPC = async (upc) => {
+    const apiUrl = `http://localhost:8080/api?upc=${upc}`; // Update to point to NGINX
     try {
-        const response = await axios.get(
-            `${proxyUrl}${apiUrl}`,
-            {
-                params: { upc },
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Accept-Encoding': 'gzip, deflate',
-                },
-                responseType: 'json',
-            }
-        );
+        const response = await axios.get(apiUrl, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            responseType: 'json',
+        });
 
         // Use parseProductData to format the data
         const productDetails = parseProductData(response.data);
