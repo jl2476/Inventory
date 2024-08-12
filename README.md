@@ -16,3 +16,9 @@ docker-compose up --build
 
 ```
 
+## Getting Started
+
+Try out the server here! 
+
+(https://inventorytracker-git-main-jl2476s-projects.vercel.app)
+
